@@ -35,20 +35,48 @@ def format_ping_message(source_id, destination_id):
     data = json.dumps({"type": "PING"})
     return format_message(source_id, destination_id, namespace, data)
 
+def format_pong_message(source_id, destination_id):
+    namespace = "urn:x-cast:com.google.cast.tp.heartbeat"
+    data = json.dumps({"type": "PONG"})
+    return format_message(source_id, destination_id, namespace, data)
 
-def format_load_message(source_id, destination_id, transport_id, media_url, content_type, stream_type="BUFFERED", autoplay=True, current_time=0):
+def format_load_message(source_id, destination_id, transport_id, media_url, content_type, title=None, thumb=None, stream_type="BUFFERED", autoplay=True, current_time=0, subtitles=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1):
     namespace = "urn:x-cast:com.google.cast.media"
+
+    media_metadata = {}
+    if title:
+        media_metadata["title"] = title
+    if thumb:
+        media_metadata["thumb"] = thumb
+        media_metadata["images"] = [{"url": thumb}]
+    if not media_metadata:
+        media_metadata["metadataType"] = 0  # METADATA_TYPE_GENERIC
+
     media_information = {
         "contentId": media_url,
         "contentType": content_type,
-        "streamType": stream_type,  
-        "metadata": {
-            "metadataType": 0,  
-            "title": "My Content Title"
-        },
-        "duration": 0,  
-        "customData": {}  
+        "streamType": stream_type,
+        "metadata": media_metadata
     }
+
+    if subtitles:
+        media_information["tracks"] = [
+            {
+                "trackId": subtitle_id,
+                "trackContentId": subtitles,
+                "language": subtitles_lang,
+                "subtype": "SUBTITLES",
+                "type": "TEXT",
+                "trackContentType": subtitles_mime,
+                "name": f"{subtitles_lang} - {subtitle_id} Subtitle",
+            }
+        ]
+        media_information["textTrackStyle"] = {
+            "backgroundColor": "#FFFFFF00",
+            "edgeType": "OUTLINE",
+            "edgeColor": "#000000FF",
+        }
+
     data = json.dumps({
         "type": "LOAD",
         "transportId": transport_id,
@@ -56,9 +84,28 @@ def format_load_message(source_id, destination_id, transport_id, media_url, cont
         "media": media_information,
         "autoplay": autoplay,
         "currentTime": current_time,
+        "activeTrackIds": [subtitle_id] if subtitles else None,
         "customData": {}
     })
     return format_message(source_id, destination_id, namespace, data)
+
+def format_get_status_message(source_id, destination_id):
+    namespace = "urn:x-cast:com.google.cast.media"
+    payload = {
+        "type": "GET_STATUS",
+        "requestId": 1
+    }
+    return format_message(source_id, destination_id, namespace, json.dumps(payload))
+
+
+def format_play_message(source_id, destination_id, media_session_id):
+    namespace = "urn:x-cast:com.google.cast.media"
+    payload = {
+        "type": "PLAY",
+        "requestId": 3,
+        "mediaSessionId": media_session_id
+    }
+    return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 def format_field_id(field_no, field_type):
     return (field_no << 3) | field_type
@@ -159,3 +206,23 @@ def extract_message(data):
             resp[field_id] = [field_data]
     return resp
 
+import struct
+
+import re
+
+def parse_cast_response(response):
+    decoded_data = response.decode('unicode_escape')
+
+    match = re.search(r'({.*})', decoded_data)
+    
+    if match:
+        # Extract the JSON string from the match
+        json_string = match.group(1)
+        
+        # Decode the JSON string into a Python object
+        json_data = json.loads(json_string)
+        
+        return json_data
+    else:
+        print("No JSON found in response")
+        return None
