@@ -11,6 +11,7 @@ import ssl
 chromecasts = []
 
 SENDER_NAME = "sender-0"
+RECEIVER_NAME = "receiver-0"
 BIG_BUCK_BUNNY_VIDEO = "http://fling.infthink.com/droidream/samples/BigBuckBunny.mp4"
 
 def is_active(ip):
@@ -37,12 +38,24 @@ def detect_chromecasts(ip):
         'User-Agent': 'curl/7.54.0',
     }
     # TODO change that to not use a loop, it's just one port
-    for port in [8008]: #8009
+    for port in [8008, 8009]: #8009
         try:
             response = requests.get(f'http://{ip}:{port}/ssdp/device-desc.xml', headers=headers)
-            chromecast_info = parse_chromecast_info(response.text)
-            if 'Chromecast' in response.text:
+            res = response.text
+            if 'Chromecast' in res:
+                print("Using SSDP")
+                chromecast_info = parse_chromecast_info(res)
                 return chromecast_info
+            else:
+                print("Using eureka Info")
+                response = requests.get(f'http://{ip}:{port}/setup/eureka_info', headers=headers)
+                res = response.text
+                if '"name":"' in res:
+                    chromecast_info = json.loads(res)
+                    return {
+                        'ip': chromecast_info['ip_address'],
+                        'friendlyName': chromecast_info['name']
+                    }
         except requests.exceptions.RequestException:
             pass
 
@@ -85,7 +98,7 @@ def go_chromecast(chromecast):
     media_url = BIG_BUCK_BUNNY_VIDEO
     content_type = "video/mp4"
     source_id = SENDER_NAME
-    destination_id = chromecast["friendlyName"]
+    destination_id = RECEIVER_NAME #chromecast["friendlyName"]
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as raw_s:
         raw_s.connect((chromecast['ip'], 8009))
@@ -93,12 +106,16 @@ def go_chromecast(chromecast):
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
         s = context.wrap_socket(raw_s, server_hostname=chromecast['ip'])
-
-        s.sendall(format_connect_message(source_id, destination_id))
+        # CONNECT message
         
+        s.sendall(format_connect_message(source_id, destination_id))
+        print(f"CONNECT sent to ip {chromecast['ip']}")
+
+        s.sendall(format_launch_message(source_id, destination_id, app_id))
         response = s.recv(4096)
+        print(response)
         response_data = extract_message(response)
-        print("Response after CONNECT:", response_data)
+        print("Response after LAUNCH:", response_data)
 
         if not response_data or "sessionId" not in response_data or "transportId" not in response_data:
             print("Invalid response data")
@@ -108,11 +125,6 @@ def go_chromecast(chromecast):
         print("Session ID:", session_id)
         transport_id = response_data.get("transportId")[0]
         print("Transport ID:", transport_id)
-        
-        s.sendall(format_launch_message(source_id, destination_id, app_id))
-        response = s.recv(4096)
-        response_data = extract_message(response)
-        print("Response after LAUNCH:", response_data)
 
         s.sendall(format_media_connect_message(source_id, destination_id, transport_id))
         response = s.recv(4096)
@@ -129,5 +141,5 @@ if __name__ == '__main__':
     search_device()
     for chromecast in chromecasts:
         status = go_chromecast(chromecast)  
-        print(f"Status for {chromecast['friendlyName']}: {status}")
+        print(f"Status for {chromecast['friendlyName']} in ip {chromecast['ip']}: {status}")
 

@@ -16,8 +16,8 @@ APP_BBCSOUNDS = "03977A48"
 APP_BBCIPLAYER = "5E81F6DB"
 
 def format_connect_message(source_id, destination_id):
-    namespace = "urn:x-cast:com.google.cast.receiver"
-    data = json.dumps({"type": "CONNECT", "origin" : {}})
+    namespace = "urn:x-cast:com.google.cast.tp.connection"
+    data = json.dumps({"type": "CONNECT"})
     return format_message(source_id, destination_id, namespace, data)
 
 def format_launch_message(source_id, destination_id, app_id):
@@ -30,19 +30,32 @@ def format_media_connect_message(source_id, destination_id, transport_id):
     data = json.dumps({"type": "CONNECT", "transportId": transport_id, "requestId": 1})
     return format_message(source_id, destination_id, namespace, data)
 
-def format_load_message(source_id, destination_id, transport_id, media_url, content_type):
+def format_ping_message(source_id, destination_id):
+    namespace = "urn:x-cast:com.google.cast.tp.heartbeat"
+    data = json.dumps({"type": "PING"})
+    return format_message(source_id, destination_id, namespace, data)
+
+
+def format_load_message(source_id, destination_id, transport_id, media_url, content_type, stream_type="BUFFERED", autoplay=True, current_time=0):
     namespace = "urn:x-cast:com.google.cast.media"
+    media_information = {
+        "contentId": media_url,
+        "contentType": content_type,
+        "streamType": stream_type,  
+        "metadata": {
+            "metadataType": 0,  
+            "title": "My Content Title"
+        },
+        "duration": 0,  
+        "customData": {}  
+    }
     data = json.dumps({
         "type": "LOAD",
         "transportId": transport_id,
         "requestId": 1,
-        "media": {
-            "contentId": media_url,
-            "contentType": content_type,
-            "streamType": "BUFFERED",
-        },
-        "autoplay": True,
-        "currentTime": 0,
+        "media": media_information,
+        "autoplay": autoplay,
+        "currentTime": current_time,
         "customData": {}
     })
     return format_message(source_id, destination_id, namespace, data)
@@ -113,11 +126,16 @@ def extract_string_field(data):
     field_id = extract_field_id(data)[0]
     length, ptr = decode_varint(data, 1)
     string_end_ptr = ptr + length
-    string = data[ptr:string_end_ptr].decode('utf-8')
+    string = data[ptr:string_end_ptr]
+    try:
+        string = json.loads(string.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        pass
     remainder = b""
     if len(data) > string_end_ptr:
         remainder = data[string_end_ptr:]
     return field_id, string, remainder
+
 
 def decode_varint(data, ptr):
     value = 0
@@ -140,3 +158,4 @@ def extract_message(data):
         else:
             resp[field_id] = [field_data]
     return resp
+
