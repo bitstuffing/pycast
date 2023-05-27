@@ -12,7 +12,7 @@ chromecasts = []
 
 SENDER_NAME = "sender-0"
 RECEIVER_NAME = "receiver-0"
-BIG_BUCK_BUNNY_VIDEO = "http://fling.infthink.com/droidream/samples/BigBuckBunny.mp4"
+BIG_BUCK_BUNNY_VIDEO = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_30MB.mp4"
 
 def is_active(ip):
     try:
@@ -107,66 +107,47 @@ def go_chromecast(chromecast):
         context.verify_mode = ssl.CERT_NONE
         s = context.wrap_socket(raw_s, server_hostname=chromecast['ip'])
         # CONNECT message
-        
         s.sendall(format_connect_message(source_id, destination_id))
         print(f"CONNECT sent to ip {chromecast['ip']}")
-
-        print("sending LAUNCH")
-        s.sendall(format_launch_message(source_id, destination_id, app_id))
-        response = s.recv(4096)
-        response_data = parse_cast_response(response)
-        print("Response after LAUNCH:", response_data)
-        if not response_data or "status" not in response_data or "applications" not in response_data["status"]:
-            print("Invalid response data, try again")
-            return
-        
-        session_id = response_data["status"]["applications"][0]["sessionId"]  
-        print("Session ID:", session_id)
-        transport_id = response_data["status"]["applications"][0]["transportId"]
-        print("Transport ID:", transport_id)
-
-        '''
-        # Connect to the transportId
-        s.sendall(format_connect_message(source_id, transport_id))
-        response = s.recv(4096)
-        response_data = parse_cast_response(response)
-        print("Response after CONNECT to transportId:", response_data)
-
-        s.sendall(format_media_connect_message(source_id, destination_id, transport_id))
-        response = s.recv(4096)
-        response_data = parse_cast_response(response)
-        print("Response after MEDIA CONNECT:", response_data)
-        '''
-        '''
         s.sendall(format_get_status_message(source_id, destination_id))
         response = s.recv(4096)
         response_data = parse_cast_response(response)
         print("Response after GET_STATUS:", response_data)
-        '''
-        s.sendall(format_load_message(source_id, destination_id, transport_id, media_url, content_type))
+
+        session_id = None
+        transport_id = None
+        while(not session_id):
+            print("sending LAUNCH")
+            s.sendall(format_launch_message(source_id, destination_id, app_id))
+            response = s.recv(4096)
+            response_data = parse_cast_response(response)
+            print("Response after LAUNCH:", response_data)
+            if not response_data or "status" not in response_data or "applications" not in response_data["status"]:
+                print("Invalid response data, try again")
+            else:
+                session_id = response_data["status"]["applications"][0]["sessionId"]  
+                print("Session ID:", session_id)
+                transport_id = response_data["status"]["applications"][0]["transportId"]
+                print("Transport ID:", transport_id)
+
+        print("continue...")
+        s.sendall(format_load_message(source_id, destination_id, session_id, media_url, content_type))
         response = s.recv(4096)
         response_data = parse_cast_response(response)
         print("Response after LOAD:", response_data)
-        '''
-        if response_data and "type" in response_data and response_data["type"] == "PING":
-            s.sendall(format_pong_message(source_id, destination_id))
-            response = s.recv(4096)
-            response_data = parse_cast_response(response)
-            print("Response after PONG:", response_data)
-        print("continue...")
-        
+
         s.sendall(format_play_message(source_id, destination_id, session_id))
         response = s.recv(4096)
         response_data = parse_cast_response(response)
         print("Response after PLAY:", response_data)
-        '''
-
+        
 
 if __name__ == '__main__':
     search_device()
     for chromecast in chromecasts:
-        if chromecast['ip'] ==  "192.168.1.42": # test with one chromecast
+        if chromecast['ip'] == "192.168.1.42": # test with one chromecast
             status = go_chromecast(chromecast)  
             print(f"Status for {chromecast['friendlyName']} in ip {chromecast['ip']}: {status}")
+            break
             
 

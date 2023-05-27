@@ -22,12 +22,12 @@ def format_connect_message(source_id, destination_id):
 
 def format_launch_message(source_id, destination_id, app_id):
     namespace = "urn:x-cast:com.google.cast.receiver"
-    data = json.dumps({"type": "LAUNCH", "appId": app_id, "requestId": 1})
+    data = json.dumps({"type": "LAUNCH", "appId": app_id, "requestId": 0})
     return format_message(source_id, destination_id, namespace, data)
 
 def format_media_connect_message(source_id, destination_id, transport_id):
     namespace = "urn:x-cast:com.google.cast.media"
-    data = json.dumps({"type": "CONNECT", "transportId": transport_id, "requestId": 1})
+    data = json.dumps({"type": "CONNECT", "transportId": transport_id, "requestId": 0})
     return format_message(source_id, destination_id, namespace, data)
 
 def format_ping_message(source_id, destination_id):
@@ -40,70 +40,71 @@ def format_pong_message(source_id, destination_id):
     data = json.dumps({"type": "PONG"})
     return format_message(source_id, destination_id, namespace, data)
 
-def format_load_message(source_id, destination_id, transport_id, media_url, content_type, title=None, thumb=None, stream_type="BUFFERED", autoplay=True, current_time=0, subtitles=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1):
+def format_load_message(source_id, destination_id, session_id, media_url, content_type, title=None, thumb=None, current_time=0.0, autoplay=False, stream_type="BUFFERED", metadata=None, subtitles_url=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1):
     namespace = "urn:x-cast:com.google.cast.media"
-
-    media_metadata = {}
-    if title:
-        media_metadata["title"] = title
-    if thumb:
-        media_metadata["thumb"] = thumb
-        media_metadata["images"] = [{"url": thumb}]
-    if not media_metadata:
-        media_metadata["metadataType"] = 0  # METADATA_TYPE_GENERIC
-
-    media_information = {
-        "contentId": media_url,
-        "contentType": content_type,
-        "streamType": stream_type,
-        "metadata": media_metadata
-    }
-
-    if subtitles:
-        media_information["tracks"] = [
-            {
-                "trackId": subtitle_id,
-                "trackContentId": subtitles,
-                "language": subtitles_lang,
-                "subtype": "SUBTITLES",
-                "type": "TEXT",
-                "trackContentType": subtitles_mime,
-                "name": f"{subtitles_lang} - {subtitle_id} Subtitle",
-            }
-        ]
-        media_information["textTrackStyle"] = {
-            "backgroundColor": "#FFFFFF00",
-            "edgeType": "OUTLINE",
-            "edgeColor": "#000000FF",
-        }
-
-    data = json.dumps({
+    payload = {
         "type": "LOAD",
-        "transportId": transport_id,
-        "requestId": 1,
-        "media": media_information,
+        "sessionId": session_id,
+        "media": {
+            "contentId": media_url,
+            "streamType": stream_type,
+            "contentType": content_type,
+            "metadata": metadata if metadata is not None else {}
+        },
         "autoplay": autoplay,
         "currentTime": current_time,
-        "activeTrackIds": [subtitle_id] if subtitles else None,
-        "customData": {}
-    })
-    return format_message(source_id, destination_id, namespace, data)
+        "requestId": 0,
+    }
+
+    if title is not None:
+        payload["media"]["metadata"]["title"] = title
+
+    if thumb is not None:
+        payload["media"]["metadata"]["images"] = [{"url": thumb}]
+
+    # Include subtitles if a subtitle URL is provided
+    if subtitles_url is not None:
+        payload["media"]["tracks"] = [
+            {
+                "trackId": subtitle_id,
+                "type": "TEXT",
+                "trackContentId": subtitles_url,
+                "trackContentType": subtitles_mime,
+                "name": "Subtitles",
+                "language": subtitles_lang,
+                "subtype": "SUBTITLES",
+            }
+        ]
+        payload["media"]["textTrackStyle"] = {
+            "foregroundColor": "#FFFFFFFF",
+            "backgroundColor": "#000000FF",
+            "fontScale": 1.2,
+            "fontStyle": "NORMAL",
+            "fontFamily": "Droid Serif",
+            "fontGenericFamily": "SERIF",
+            "windowColor": "#AA00FFFF",
+            "windowRoundedCornerRadius": 10,
+            "windowType": "ROUNDED_CORNERS",
+        }
+
+    return format_message(source_id, destination_id, namespace, json.dumps(payload))
+
 
 def format_get_status_message(source_id, destination_id):
     namespace = "urn:x-cast:com.google.cast.media"
     payload = {
         "type": "GET_STATUS",
-        "requestId": 1
+        "requestId": 0
     }
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 
-def format_play_message(source_id, destination_id, media_session_id):
+def format_play_message(source_id, destination_id, sessionId):
     namespace = "urn:x-cast:com.google.cast.media"
     payload = {
         "type": "PLAY",
-        "requestId": 3,
-        "mediaSessionId": media_session_id
+        "requestId": 0,
+        "sessionId": sessionId
     }
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
