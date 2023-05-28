@@ -1,5 +1,7 @@
+import struct
 from struct import pack, unpack
 import json
+import re
 
 # app ids
 APP_BACKDROP = "E8C28D3C"
@@ -17,17 +19,12 @@ APP_BBCIPLAYER = "5E81F6DB"
 
 def format_connect_message(source_id, destination_id):
     namespace = "urn:x-cast:com.google.cast.tp.connection"
-    data = json.dumps( {'type': 'CONNECT', 'origin': {}, 'userAgent': 'PyChromecast', 'senderInfo': {'sdkType': 2, 'version': '15.605.1.3', 'browserVersion': '44.0.2403.30', 'platform': 4, 'systemVersion': 'Macintosh; Intel Mac OS X10_10_3', 'connectionType': 1}})
+    data = json.dumps( {'type': 'CONNECT', 'origin': {}})
     return format_message(source_id, destination_id, namespace, data)
 
 def format_launch_message(source_id, destination_id, app_id, requestId):
     namespace = "urn:x-cast:com.google.cast.receiver"
     data = json.dumps({"type": "LAUNCH", "appId": app_id, "requestId": requestId})
-    return format_message(source_id, destination_id, namespace, data)
-
-def format_media_connect_message(source_id, destination_id, transport_id, requestId):
-    namespace = "urn:x-cast:com.google.cast.media"
-    data = json.dumps({"type": "CONNECT", "transportId": transport_id, "requestId": requestId})
     return format_message(source_id, destination_id, namespace, data)
 
 def format_ping_message(source_id, destination_id):
@@ -40,8 +37,7 @@ def format_pong_message(source_id, destination_id):
     data = json.dumps({"type": "PONG"})
     return format_message(source_id, destination_id, namespace, data)
 
-def format_load_message(source_id, destination_id, session_id, media_url, content_type, title=None, thumb=None, current_time=0.0, autoplay=True, stream_type="BUFFERED", metadata=None, subtitles_url=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1, requestId=0):
-    namespace = "urn:x-cast:com.google.cast.broadcast"
+def format_load_message(source_id, destination_id, session_id, media_url, content_type, title=None, thumb=None, current_time=0.0, autoplay=True, stream_type="BUFFERED", metadata=None, subtitles_url=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1, requestId=0, namespace = "urn:x-cast:com.google.cast.media"):
     payload = {
         "type": "LOAD",
         "sessionId": session_id,
@@ -86,12 +82,10 @@ def format_load_message(source_id, destination_id, session_id, media_url, conten
             "windowRoundedCornerRadius": 10,
             "windowType": "ROUNDED_CORNERS",
         }
-
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 
-def format_get_status_message(source_id, destination_id, requestId):
-    namespace = "urn:x-cast:com.google.cast.media"
+def format_get_status_message(source_id, destination_id, requestId, namespace = "urn:x-cast:com.google.cast.receiver"):
     payload = {
         "type": "GET_STATUS",
         "requestId": requestId
@@ -100,12 +94,12 @@ def format_get_status_message(source_id, destination_id, requestId):
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 
-def format_play_message(source_id, destination_id, sessionId, requestId):
+def format_play_message(source_id, destination_id, media_session_id, requestId):
     namespace = "urn:x-cast:com.google.cast.media"
     payload = {
         "type": "PLAY",
         "requestId": requestId,
-        "sessionId": sessionId
+        "mediaSessionId": media_session_id
     }
     
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
@@ -208,10 +202,6 @@ def extract_message(data):
         else:
             resp[field_id] = [field_data]
     return resp
-
-import struct
-
-import re
 
 def parse_cast_response(response):
     decoded_data = response.decode('unicode_escape')
