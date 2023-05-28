@@ -17,17 +17,17 @@ APP_BBCIPLAYER = "5E81F6DB"
 
 def format_connect_message(source_id, destination_id):
     namespace = "urn:x-cast:com.google.cast.tp.connection"
-    data = json.dumps({"type": "CONNECT"})
+    data = json.dumps( {'type': 'CONNECT', 'origin': {}, 'userAgent': 'PyChromecast', 'senderInfo': {'sdkType': 2, 'version': '15.605.1.3', 'browserVersion': '44.0.2403.30', 'platform': 4, 'systemVersion': 'Macintosh; Intel Mac OS X10_10_3', 'connectionType': 1}})
     return format_message(source_id, destination_id, namespace, data)
 
-def format_launch_message(source_id, destination_id, app_id):
+def format_launch_message(source_id, destination_id, app_id, requestId):
     namespace = "urn:x-cast:com.google.cast.receiver"
-    data = json.dumps({"type": "LAUNCH", "appId": app_id, "requestId": 0})
+    data = json.dumps({"type": "LAUNCH", "appId": app_id, "requestId": requestId})
     return format_message(source_id, destination_id, namespace, data)
 
-def format_media_connect_message(source_id, destination_id, transport_id):
+def format_media_connect_message(source_id, destination_id, transport_id, requestId):
     namespace = "urn:x-cast:com.google.cast.media"
-    data = json.dumps({"type": "CONNECT", "transportId": transport_id, "requestId": 0})
+    data = json.dumps({"type": "CONNECT", "transportId": transport_id, "requestId": requestId})
     return format_message(source_id, destination_id, namespace, data)
 
 def format_ping_message(source_id, destination_id):
@@ -40,8 +40,8 @@ def format_pong_message(source_id, destination_id):
     data = json.dumps({"type": "PONG"})
     return format_message(source_id, destination_id, namespace, data)
 
-def format_load_message(source_id, destination_id, session_id, media_url, content_type, title=None, thumb=None, current_time=0.0, autoplay=False, stream_type="BUFFERED", metadata=None, subtitles_url=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1):
-    namespace = "urn:x-cast:com.google.cast.media"
+def format_load_message(source_id, destination_id, session_id, media_url, content_type, title=None, thumb=None, current_time=0.0, autoplay=True, stream_type="BUFFERED", metadata=None, subtitles_url=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1, requestId=0):
+    namespace = "urn:x-cast:com.google.cast.broadcast"
     payload = {
         "type": "LOAD",
         "sessionId": session_id,
@@ -53,9 +53,9 @@ def format_load_message(source_id, destination_id, session_id, media_url, conten
         },
         "autoplay": autoplay,
         "currentTime": current_time,
-        "requestId": 0,
+        "customData": {},
+        "requestId": requestId,
     }
-
     if title is not None:
         payload["media"]["metadata"]["title"] = title
 
@@ -90,22 +90,24 @@ def format_load_message(source_id, destination_id, session_id, media_url, conten
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 
-def format_get_status_message(source_id, destination_id):
+def format_get_status_message(source_id, destination_id, requestId):
     namespace = "urn:x-cast:com.google.cast.media"
     payload = {
         "type": "GET_STATUS",
-        "requestId": 0
+        "requestId": requestId
     }
+    
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 
-def format_play_message(source_id, destination_id, sessionId):
+def format_play_message(source_id, destination_id, sessionId, requestId):
     namespace = "urn:x-cast:com.google.cast.media"
     payload = {
         "type": "PLAY",
-        "requestId": 0,
+        "requestId": requestId,
         "sessionId": sessionId
     }
+    
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 def format_field_id(field_no, field_type):

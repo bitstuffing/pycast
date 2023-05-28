@@ -12,7 +12,7 @@ chromecasts = []
 
 SENDER_NAME = "sender-0"
 RECEIVER_NAME = "receiver-0"
-BIG_BUCK_BUNNY_VIDEO = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_30MB.mp4"
+BIG_BUCK_BUNNY_VIDEO = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
 
 def is_active(ip):
     try:
@@ -94,11 +94,12 @@ def search_device():
 This method is used to study chromecast protocol
 '''
 def go_chromecast(chromecast):
-    app_id = APP_MEDIA_RECEIVER
+    app_id = APP_HOMEASSISTANT_MEDIA
     media_url = BIG_BUCK_BUNNY_VIDEO
     content_type = "video/mp4"
     source_id = SENDER_NAME
     destination_id = RECEIVER_NAME
+    requestId = 0
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as raw_s:
         raw_s.connect((chromecast['ip'], 8009))
@@ -109,16 +110,23 @@ def go_chromecast(chromecast):
         # CONNECT message
         s.sendall(format_connect_message(source_id, destination_id))
         print(f"CONNECT sent to ip {chromecast['ip']}")
-        s.sendall(format_get_status_message(source_id, destination_id))
+        s.sendall(format_get_status_message(source_id, destination_id, requestId))
+        requestId += 1
         response = s.recv(4096)
         response_data = parse_cast_response(response)
         print("Response after GET_STATUS:", response_data)
+
+        s.sendall(format_ping_message(source_id, destination_id))
+        response = s.recv(4096)
+        response_data = parse_cast_response(response)
+        print("Response after PING:", response_data)
 
         session_id = None
         transport_id = None
         while(not session_id):
             print("sending LAUNCH")
-            s.sendall(format_launch_message(source_id, destination_id, app_id))
+            s.sendall(format_launch_message(source_id, destination_id, app_id, requestId))
+            requestId += 1
             response = s.recv(4096)
             response_data = parse_cast_response(response)
             print("Response after LAUNCH:", response_data)
@@ -131,16 +139,42 @@ def go_chromecast(chromecast):
                 print("Transport ID:", transport_id)
 
         print("continue...")
-        s.sendall(format_load_message(source_id, destination_id, session_id, media_url, content_type))
+
+        # CONNECT message other time
+        s.sendall(format_connect_message(source_id, destination_id))
+        print(f"re-CONNECT sent to ip {chromecast['ip']}")
+        response = s.recv(4096)
+        response_data = parse_cast_response(response)
+        print("Response after re-CONNECT:", response_data)
+        
+        s.sendall(format_get_status_message(source_id, destination_id, requestId))
+        requestId += 1
+        response = s.recv(4096)
+        response_data = parse_cast_response(response)
+        print("Response after GET_STATUS:", response_data)
+
+        s.sendall(format_ping_message(source_id, destination_id))
+        response = s.recv(4096)
+        response_data = parse_cast_response(response)
+        print("Response after PING:", response_data)
+        
+        s.sendall(format_load_message(source_id, destination_id, session_id, media_url, content_type, requestId=requestId))
+        requestId += 1
         response = s.recv(4096)
         response_data = parse_cast_response(response)
         print("Response after LOAD:", response_data)
 
-        s.sendall(format_play_message(source_id, destination_id, session_id))
+        s.sendall(format_ping_message(source_id, destination_id))
+        response = s.recv(4096)
+        response_data = parse_cast_response(response)
+        print("Response after PING:", response_data)
+        '''
+        s.sendall(format_play_message(source_id, destination_id, session_id, requestId=requestId))
+        requestId += 1
         response = s.recv(4096)
         response_data = parse_cast_response(response)
         print("Response after PLAY:", response_data)
-        
+        '''
 
 if __name__ == '__main__':
     search_device()
