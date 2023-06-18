@@ -7,15 +7,43 @@ from messenger import *
 import codecs
 import json
 import ssl
+import ipaddress
+import subprocess
 
 chromecasts = []
 
-NETWORKING = '192.168.2.0'
-BROADCAST = '192.168.2.255'
+def ip_to_network(ip):
+    parts = ip.split('.')
+    parts[-1] = '0'
+    network = '.'.join(parts)
+    return network
+
+def get_local_ip_address():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        IP = s.getsockname()[0]
+    finally:
+        s.close()
+    return IP
+
+def get_network_range():
+    ip_address = get_local_ip_address()
+    network = ip_to_network(ip_address)
+    broadcast = network[:-1] + '255' # TODO, now it's class C, change that
+    return network, broadcast
+
+
+NETWORKING, BROADCAST = get_network_range()
 
 SENDER_NAME = "sender-0"
 RECEIVER_NAME = "receiver-0"
 BIG_BUCK_BUNNY_VIDEO = "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+MIMETYPE_VIDEO = "video/mp4"
+MIMETYPE_VIDEO_URL = "application/x-mpegURL"
+MIMETYPE_AAC = "audio/aac"
+TVE1_STREAM = "https://ztnr.rtve.es/ztnr/1688877.m3u8"
+TELEMADRID_STREAM = "https://telemadridhls2-live-hls.secure2.footprint.net/egress/chandler/telemadrid/telemadrid_1/index.m3u8"
 
 def is_active(ip):
     try:
@@ -98,8 +126,8 @@ This method is used to study chromecast protocol
 '''
 def go_chromecast(chromecast):
     app_id = APP_MEDIA_RECEIVER
-    media_url = BIG_BUCK_BUNNY_VIDEO
-    content_type = "video/mp4"
+    media_url = TELEMADRID_STREAM
+    content_type = MIMETYPE_VIDEO_URL
     source_id = SENDER_NAME
     destination_id = RECEIVER_NAME
     requestId = 1

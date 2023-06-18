@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+  <specVersion>
+    <major>1</major>
+    <minor>0</minor>
+  </specVersion>
+  <URLBase>http://DUMMY_IP_ADDRESS:8008</URLBase>
+  <device>
+    <deviceType>urn:dial-multiscreen-org:device:dial:1</deviceType>
+    <friendlyName>Kitchen</friendlyName>
+    <manufacturer>Google Inc.</manufacturer>
+    <modelName>Eureka Dongle</modelName>
+    <UDN>uuid:ed9955ce-406c-a123-0847-753d75b47251</UDN>
+    <iconList>
+      <icon>
+        <mimetype>image/png</mimetype>
+        <width>98</width>
+        <height>55</height>
+        <depth>32</depth>
+        <url>/setup/icon.png</url>
+      </icon>
+    </iconList>
+    <serviceList>
+      <service>
+        <serviceType>urn:dial-multiscreen-org:service:dial:1</serviceType>
+        <serviceId>urn:dial-multiscreen-org:serviceId:dial</serviceId>
+        <controlURL>/ssdp/notfound</controlURL>
+        <eventSubURL>/ssdp/notfound</eventSubURL>
+        <SCPDURL>/ssdp/notfound</SCPDURL>
+      </service>
+    </serviceList>
+  </device>
+</root>
