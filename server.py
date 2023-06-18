@@ -3,6 +3,9 @@ import ssl
 import json
 import re
 from messenger import *
+import uuid
+
+import subprocess
 
 # Create a socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -14,55 +17,90 @@ context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
 context.load_cert_chain('cert.pem', 'key.pem')
 ssl_sock = context.wrap_socket(sock, server_side=True)
 
-def generate_media_status(request_id):
-    media_status = {
-        "type": "MEDIA_STATUS",
-        "status": [],
-        "requestId": request_id
+def generate_media_status(requestId=0, contentId="https://telemadridhls2-live-hls.secure2.footprint.net/egress/chandler/telemadrid/telemadrid_1/index.m3u8"):
+    response = {
+        "requestId": requestId, 
+        "status": [{
+            "mediaSessionId": 1, 
+            "playbackRate": 1, 
+            "playerState": "IDLE", 
+            "currentTime": 0, 
+            "supportedMediaCommands": 12303,#274447, 
+            "volume": {
+                "level": 1, 
+                "muted": False
+            }, 
+            "media": {
+                "contentId": contentId, 
+                "streamType": "BUFFERED", 
+                "contentType": "application/x-mpegURL", 
+                "metadata": {}
+            }, 
+            "currentItemId": 1, 
+            "extendedStatus": {
+                "playerState": "LOADING", 
+                "media": {
+                    "contentId": contentId, 
+                    "streamType": "BUFFERED", 
+                    "contentType": "application/x-mpegURL", 
+                    "metadata": {}
+                }, 
+                "mediaSessionId": 1
+            }, 
+            "repeatMode": "REPEAT_OFF"
+        }], 
+        "type": "MEDIA_STATUS"
     }
-
-    return json.dumps(media_status)
+    
+    return response
 
 
 def generate_receiver_status(requestId=1):
     response = {
         "requestId": requestId, 
         "status": {
-            "applications": [
-                {
-                    "appId": "CC1AD845", 
-                    "displayName": "Default Media Receiver",
-                    "iconUrl": "",
-                    "isIdleScreen": False,
-                    "launchedFromCloud": False,
-                    "namespaces": [
-                        {"name": "urn:x-cast:com.google.cast.cac"}, 
-                        {"name": "urn:x-cast:com.google.cast.debugoverlay"}, 
-                        {"name": "urn:x-cast:com.google.cast.broadcast"}, 
-                        {"name": "urn:x-cast:com.google.cast.media"}
-                    ], 
-                    "sessionId": "854648fc-5c11-4bda-ab4b-88dec3fa8994", 
-                    "statusText": "Default Media Receiver", 
-                    "transportId": "854648fc-5c11-4bda-ab4b-88dec3fa8994", 
-                    "universalAppId": "CC1AD845"
-                }
-            ], 
-            "userEq": {
-                "high_shelf": {"frequency": 4500.0, "gain_db": 0.0, "quality": 0.707}, 
-                "low_shelf": {"frequency": 150.0, "gain_db": 0.0, "quality": 0.707}, 
-                "max_peaking_eqs": 0, 
-                "peaking_eqs": []
-            }, 
+            "applications": [{
+                "appId": "CC1AD845",
+                "appType": "WEB",
+                "displayName": "Default Media Receiver",
+                "iconUrl": "",
+                "isIdleScreen": False,
+                "launchedFromCloud": False,
+                "namespaces": [
+                    {"name": "urn:x-cast:com.google.cast.cac"},
+                    {"name": "urn:x-cast:com.google.cast.debugoverlay"},
+                    {"name": "urn:x-cast:com.google.cast.broadcast"},
+                    {"name": "urn:x-cast:com.google.cast.media"}
+                ],
+                "sessionId": session_id,
+                "statusText": "Default Media Receiver",
+                "transportId": transport_id,
+                "universalAppId": "CC1AD845"
+            }],
+            "userEq": {}, 
             "volume": {
-                "controlType": "master", 
-                "level": 0.6000000238418579, 
+                "controlType": "attenuation", 
+                "level": 1.0, 
                 "muted": False, 
-                "stepInterval": 0.019999999552965164
+                "stepInterval": 0.05000000074505806
             }
         }, 
         "type": "RECEIVER_STATUS"
     }
+    
     return response
+
+def play_media(url): # just for testing purposes
+    command = ["mplayer", url]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)    
+    return process
+
+
+session_id = None
+transport_id = None
+
+player = False
+url = None
 
 while True:
     # Accept a connection
@@ -96,17 +134,31 @@ while True:
                         print("ping...")
                         response = format_message('receiver-0', 'sender-vlc', 'urn:x-cast:com.google.cast.tp.heartbeat', json.dumps({'type': 'PONG'}))
                         newsocket.send(response)
+                    elif message_type == 'CLOSE':
+                        newsocket.shutdown(socket.SHUT_RDWR) # TODO
+                        newsocket.close()
+                    elif message_type == 'LOAD':
+                        print("load...")
+                        player = True
+                        url = parsed_data["media"]["contentId"]
+                        process = play_media(url)
+                        response = format_message('receiver-0', 'sender-vlc', 'urn:x-cast:com.google.cast.media', json.dumps({'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"] }))
+                        newsocket.send(response)
                     elif message_type == 'GET_STATUS':
                         if namespace == 'urn:x-cast:com.google.cast.receiver':
-                            status = generate_receiver_status(parsed_data["requestId"])
+                            session_id = str(uuid.uuid4())
+                            transport_id = session_id
+                            if not player:
+                                status = generate_receiver_status(parsed_data["requestId"])
+                            else:
+                                status = generate_media_status(parsed_data["requestId"], url)    
                         elif namespace == 'urn:x-cast:com.google.cast.media':
-                            print("2")
                             status = generate_media_status(parsed_data["requestId"])
                         else:
-                            print("3")
+                            print("unknown namespace")
                             print(namespace)
                             print(str(parsed_data))
-                            continue  # Unknown namespace, skip this message
+                            continue  # skip this message
                         response = format_message('receiver-0', 'sender-vlc', namespace, json.dumps(status))
                         newsocket.send(response)
             else:
