@@ -4,8 +4,28 @@ import json
 import re
 from messenger import *
 import uuid
-
+import sys
 import subprocess
+import signal
+
+newsocket = None
+sock = None
+
+def signal_handler(signal, frame):
+    print('Ctrl+C pressed! Closing the socket.')
+    try:
+        if newsocket:
+            newsocket.shutdown(socket.SHUT_RDWR)
+            newsocket.close()
+        if sock:
+            sock.shutdown(socket.SHUT_RDWR)
+            sock.close()
+    except:
+        pass
+    sys.exit(0)
+
+# signal handler
+signal.signal(signal.SIGINT, signal_handler)
 
 # Create a socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
