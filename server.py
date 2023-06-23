@@ -123,8 +123,14 @@ player = False
 url = None
 
 while True:
-    # Accept a connection
-    newsocket, fromaddr = ssl_sock.accept()
+    newsocket = None
+    fromaddr = None
+    try:
+        # Accept a connection
+        newsocket, fromaddr = ssl_sock.accept()
+    except ssl.SSLEOFError:
+        print("SSL handshake failed, possibly due to a port scan or an abrupt closure of connection.")
+        continue
     try:
         print('Accepted connection from', fromaddr)
         
@@ -184,6 +190,7 @@ while True:
             else:
                 break
     finally:
-        # Clean up the connection
-        newsocket.shutdown(socket.SHUT_RDWR)
-        newsocket.close()
+        if newsocket:
+            # Clean up the connection
+            newsocket.shutdown(socket.SHUT_RDWR)
+            newsocket.close()
