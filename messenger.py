@@ -17,6 +17,42 @@ APP_BUBBLEUPNP = "3927FA74"
 APP_BBCSOUNDS = "03977A48"
 APP_BBCIPLAYER = "5E81F6DB"
 
+def format_auth_message(source_id, destination_id, sessionId, transportId):
+    namespace = "urn:x-cast:com.google.cast.receiver"
+    data = json.dumps({
+        'requestId': 1,
+        'status': {
+            'applications': [{
+                'appId': 'E8C28D3C',
+                'appType': 'WEB',
+                'displayName': 'Backdrop',
+                'iconUrl': '',
+                'isIdleScreen': True,
+                'launchedFromCloud': False,
+                'namespaces': [{
+                    'name': 'urn:x-cast:com.google.cast.sse'
+                }, {
+                    'name': 'urn:x-cast:com.google.cast.cac'
+                }],
+                'sessionId': sessionId,
+                'statusText': '',
+                'transportId': transportId,
+                'universalAppId': 'E8C28D3C'
+            }],
+            'isActiveInput': False,
+            'isStandBy': True,
+            'userEq': {},
+            'volume': {
+                'controlType': 'attenuation',
+                'level': 1.0,
+                'muted': False,
+                'stepInterval': 0.03999999910593033
+            }
+        },
+        'type': 'RECEIVER_STATUS'
+    })
+    return format_message(source_id, destination_id, namespace, data)
+
 def format_connect_message(source_id, destination_id):
     namespace = "urn:x-cast:com.google.cast.tp.connection"
     data = json.dumps( {'type': 'CONNECT', 'origin': {}})
@@ -139,7 +175,8 @@ def format_message(source_id, destination_id, namespace, data):
         msg += format_string_field(3, destination_id)
     msg += format_string_field(4, namespace)
     msg += format_int_field(5, 0)  # payload type : string = 0
-    msg += format_string_field(6, data)
+    if data:
+        msg += format_string_field(6, data)
     msg = bytes(msg)
     msg = prepend_length_header(msg)
     return msg
@@ -218,4 +255,5 @@ def parse_cast_response(response):
         return json_data
     else:
         print("No JSON found in response")
+        print(str(decoded_data))
         return None

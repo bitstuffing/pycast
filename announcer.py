@@ -5,6 +5,8 @@ import socketserver
 import socket
 import threading
 import time
+import string
+import uuid
 
 IP = "0.0.0.0"
 NAME = 'awesome'
@@ -23,6 +25,19 @@ CAST_IP = get_local_ip_address()
 
 print(CAST_IP)
 
+import random
+import string
+
+def generate_random_string(length):
+    characters = string.ascii_letters + string.digits
+    result = ''.join(random.choices(characters, k=length))
+    return result
+
+CAST_ID = generate_random_string(32)
+print(CAST_ID)
+
+uuid = str(uuid.uuid4())
+
 # mDNS
 info = ServiceInfo(
     "_googlecast._tcp.local.",
@@ -30,8 +45,17 @@ info = ServiceInfo(
     addresses=[socket.inet_aton(CAST_IP)],
     port=8009,
     properties={
+        'id': 'awesome',
+        'cd': CAST_ID,
+        'rm': '',
+        've': '05',
         'md': 'Chromecast',
+        'ic': '/setup/icon.png',
         'fn': NAME,
+        'ca': '4101',
+        'st': '0',
+        'bs': 'FA8FCA843B31',
+        'nf': '1',
         'rs': '',
     },
     server="{}.local.".format(ID),
@@ -77,7 +101,7 @@ class SSDPServer(socketserver.UDPServer):
                 'EXT: ',
                 'LOCATION: http://{}:8008/setup/eureka_info'.format(CAST_IP),
                 'OPT: "http://schemas.upnp.org/upnp/1/0/"; ns=01',
-                '01-NLS: b9200ebb-736d-4b93-b4ba-210f1f9fbfbd',
+                '01-NLS: {}'.format(CAST_ID),
                 'SERVER: Linux/3.14.0 UPnP/1.0 quick_ssdp/1.0',
                 'ST: urn:dial-multiscreen-org:service:dial:1',
                 'USN: uuid:{}'.format(uuid),

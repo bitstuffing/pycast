@@ -7,6 +7,7 @@ import uuid
 import sys
 import subprocess
 import signal
+import threading
 
 newsocket = None
 sock = None
@@ -110,11 +111,14 @@ def generate_receiver_status(requestId=1):
     
     return response
 
-def play_media(url): # just for testing purposes
-    command = ["mplayer", url]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)    
-    return process
-
+def play_media(url):
+    command = ["vlc", url]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    t = threading.Timer(4.0, process.kill)
+    t.start()
+    stdout, stderr = process.communicate()
+    t.cancel()
+    return stdout, stderr
 
 session_id = None
 transport_id = None
@@ -136,7 +140,12 @@ while True:
         
         # Receive data and print it out
         while True:
-            data = newsocket.recv(1024)
+            try:
+                data = newsocket.recv(1024)
+            except:
+                newsocket.shutdown(socket.SHUT_RDWR) # TODO
+                newsocket.close()
+                sock.close()
             if data:
                 print('Received:', data)
                 
@@ -154,11 +163,11 @@ while True:
                     # Respond to the message
                     if message_type == 'CONNECT':
                         print("con..")
-                        response = format_message('receiver-0', 'sender-vlc', 'urn:x-cast:com.google.cast.tp.connection', json.dumps({'type': 'CONNECTED'}))
+                        response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.tp.connection', json.dumps({'type': 'CONNECTED'}))
                         newsocket.send(response)
                     elif message_type == 'PING':
                         print("ping...")
-                        response = format_message('receiver-0', 'sender-vlc', 'urn:x-cast:com.google.cast.tp.heartbeat', json.dumps({'type': 'PONG'}))
+                        response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.tp.heartbeat', json.dumps({'type': 'PONG'}))
                         newsocket.send(response)
                     elif message_type == 'CLOSE':
                         newsocket.shutdown(socket.SHUT_RDWR) # TODO
@@ -168,29 +177,62 @@ while True:
                         player = True
                         url = parsed_data["media"]["contentId"]
                         process = play_media(url)
-                        response = format_message('receiver-0', 'sender-vlc', 'urn:x-cast:com.google.cast.media', json.dumps({'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"] }))
+                        response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.media', json.dumps({'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"] }))
                         newsocket.send(response)
                     elif message_type == 'GET_STATUS':
                         if namespace == 'urn:x-cast:com.google.cast.receiver':
                             session_id = str(uuid.uuid4())
                             transport_id = session_id
                             if not player:
+                                print("no player")
                                 status = generate_receiver_status(parsed_data["requestId"])
                             else:
+                                print("player")
                                 status = generate_media_status(parsed_data["requestId"], url)    
                         elif namespace == 'urn:x-cast:com.google.cast.media':
-                            status = generate_media_status(parsed_data["requestId"])
+                            print("media")
+                            status = {'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"] }
                         else:
                             print("unknown namespace")
                             print(namespace)
                             print(str(parsed_data))
                             continue  # skip this message
-                        response = format_message('receiver-0', 'sender-vlc', namespace, json.dumps(status))
+                        response = format_message('receiver-0', 'sender-0', namespace, json.dumps(status))
                         newsocket.send(response)
+                    elif message_type == 'CLOSE':
+                        print("close...")
+                        newsocket.shutdown(socket.SHUT_RDWR)
+                        newsocket.close()
+                        sock.shutdown(socket.SHUT_RDWR)
+                        sock.close()
+                        sys.exit(0)
+                    else:
+                        print("unknown message type")
+                        print(str(parsed_data))
+                        continue
+                else:
+                    if namespace == "urn:x-cast:com.google.cast.tp.deviceauth":
+                        print("device auth...")
+                        session_id = str(uuid.uuid4())
+                        transport_id = session_id
+                        response = format_auth_message('receiver-0', 'sender-0', session_id, transport_id)
+                        newsocket.send(response)
+                    elif namespace == 'urn:x-cast:com.google.cast.tp.heartbeat':
+                        print("heartbeat...")
+                        response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.tp.heartbeat', json.dumps(
+                            {'type': 'PONG'}
+                        ))
+                        newsocket.send(response)
+                    else:
+                        print("unknown message")
+                        print(namespace)
+                        continue
             else:
                 break
     finally:
         if newsocket:
-            # Clean up the connection
             newsocket.shutdown(socket.SHUT_RDWR)
             newsocket.close()
+        if sock:
+            sock.shutdown(socket.SHUT_RDWR)
+            sock.close()
