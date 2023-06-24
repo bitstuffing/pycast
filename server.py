@@ -9,6 +9,9 @@ import subprocess
 import signal
 import threading
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
 newsocket = None
 sock = None
 
@@ -132,8 +135,17 @@ while True:
     try:
         # Accept a connection
         newsocket, fromaddr = ssl_sock.accept()
-    except ssl.SSLEOFError:
-        print("SSL handshake failed, possibly due to a port scan or an abrupt closure of connection.")
+    except ssl.SSLError as e:
+        print(f"SSL error occurred: {e}")
+        if newsocket:
+            newsocket.shutdown(socket.SHUT_RDWR)
+            newsocket.close()
+        continue
+    except Exception as e:
+        print(f"Unexpected error occurred: {e}")
+        if newsocket:
+            newsocket.shutdown(socket.SHUT_RDWR)
+            newsocket.close()
         continue
     try:
         print('Accepted connection from', fromaddr)
@@ -143,13 +155,17 @@ while True:
             try:
                 data = newsocket.recv(1024)
             except:
-                newsocket.shutdown(socket.SHUT_RDWR) # TODO
+                newsocket.shutdown(socket.SHUT_RDWR) 
                 newsocket.close()
                 sock.close()
             if data:
                 print('Received:', data)
                 
-                parsed_data = parse_cast_response(data)
+                try:
+                    parsed_data = parse_cast_response(data)
+                except Exception as e:
+                    print(f"Error parsing data: {e}")
+                    continue
                 decoded_data = data.decode('unicode_escape')
                 regex = r'(urn:[^"0-9(){}]+)'
                 match = re.search(regex, decoded_data)
@@ -233,6 +249,3 @@ while True:
         if newsocket:
             newsocket.shutdown(socket.SHUT_RDWR)
             newsocket.close()
-        if sock:
-            sock.shutdown(socket.SHUT_RDWR)
-            sock.close()
