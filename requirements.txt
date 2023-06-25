@@ -2,4 +2,4 @@ zeroconf
 protobuf
 ping3
 cryptography
-
+pyOpenSSL

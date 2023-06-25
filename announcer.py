@@ -124,6 +124,7 @@ with socketserver.TCPServer((IP, 8008), DIALHandler) as httpd:
 
     try:
         while True:
+            time.sleep(0.1)
             pass
     except KeyboardInterrupt:
         pass

@@ -1,7 +1,12 @@
-import struct
 from struct import pack, unpack
 import json
 import re
+
+import uuid
+import json
+import re
+import subprocess
+import threading
 
 # app ids
 APP_BACKDROP = "E8C28D3C"
@@ -16,6 +21,170 @@ APP_YLEAREENA = "A9BCCB7C"
 APP_BUBBLEUPNP = "3927FA74"
 APP_BBCSOUNDS = "03977A48"
 APP_BBCIPLAYER = "5E81F6DB"
+
+def generate_media_status(requestId=0, contentId="https://telemadridhls2-live-hls.secure2.footprint.net/egress/chandler/telemadrid/telemadrid_1/index.m3u8"):
+    response = {
+        "requestId": requestId, 
+        "status": [{
+            "mediaSessionId": 1, 
+            "playbackRate": 1, 
+            "playerState": "IDLE", 
+            "currentTime": 0, 
+            "supportedMediaCommands": 12303,#274447, 
+            "volume": {
+                "level": 1, 
+                "muted": False
+            }, 
+            "media": {
+                "contentId": contentId, 
+                "streamType": "BUFFERED", 
+                "contentType": "application/x-mpegURL", 
+                "metadata": {}
+            }, 
+            "currentItemId": 1, 
+            "extendedStatus": {
+                "playerState": "LOADING", 
+                "media": {
+                    "contentId": contentId, 
+                    "streamType": "BUFFERED", 
+                    "contentType": "application/x-mpegURL", 
+                    "metadata": {}
+                }, 
+                "mediaSessionId": 1
+            }, 
+            "repeatMode": "REPEAT_OFF"
+        }], 
+        "type": "MEDIA_STATUS"
+    }
+    
+    return response
+
+
+def generate_receiver_status(requestId=1):
+    response = {
+        "requestId": requestId, 
+        "status": {
+            "applications": [{
+                "appId": "CC1AD845",
+                "appType": "WEB",
+                "displayName": "Default Media Receiver",
+                "iconUrl": "",
+                "isIdleScreen": False,
+                "launchedFromCloud": False,
+                "namespaces": [
+                    {"name": "urn:x-cast:com.google.cast.cac"},
+                    {"name": "urn:x-cast:com.google.cast.debugoverlay"},
+                    {"name": "urn:x-cast:com.google.cast.broadcast"},
+                    {"name": "urn:x-cast:com.google.cast.media"}
+                ],
+                "sessionId": session_id,
+                "statusText": "Default Media Receiver",
+                "transportId": transport_id,
+                "universalAppId": "CC1AD845"
+            }],
+            "userEq": {}, 
+            "volume": {
+                "controlType": "attenuation", 
+                "level": 1.0, 
+                "muted": False, 
+                "stepInterval": 0.05000000074505806
+            }
+        }, 
+        "type": "RECEIVER_STATUS"
+    }
+    
+    return response
+
+def play_media(url):
+    command = ["vlc", url]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    t = threading.Timer(4.0, process.kill)
+    t.start()
+    stdout, stderr = process.communicate()
+    t.cancel()
+    return stdout, stderr
+
+def handle_received_data(data, conn):
+    print('Received:', data)
+
+    try:
+        parsed_data = parse_cast_response(data)
+    except Exception as e:
+        print(f"Error parsing data: {e}")
+        return
+
+    decoded_data = data.decode('unicode_escape')
+    regex = r'(urn:[^"0-9(){}]+)'
+    match = re.search(regex, decoded_data)
+    namespace = None
+    if match:
+        namespace = match.group(1)
+
+    if parsed_data:
+        message_type = parsed_data.get('type')
+
+        # Respond to the message
+        if message_type == 'CONNECT':
+            print("con..")
+            response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.tp.connection', json.dumps({'type': 'CONNECTED'}))
+            conn.send(response)
+        elif message_type == 'PING':
+            print("ping...")
+            response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.tp.heartbeat', json.dumps({'type': 'PONG'}))
+            conn.send(response)
+        elif message_type == 'CLOSE':
+            conn.shutdown()  # TODO
+        elif message_type == 'LOAD':
+            print("load...")
+            player = True
+            url = parsed_data["media"]["contentId"]
+            process = play_media(url)
+            response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.media', json.dumps({'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"]}))
+            conn.send(response)
+        elif message_type == 'GET_STATUS':
+            if namespace == 'urn:x-cast:com.google.cast.receiver':
+                session_id = str(uuid.uuid4())
+                transport_id = session_id
+                if not player:
+                    print("no player")
+                    status = generate_receiver_status(parsed_data["requestId"])
+                else:
+                    print("player")
+                    status = generate_media_status(parsed_data["requestId"], url)    
+            elif namespace == 'urn:x-cast:com.google.cast.media':
+                print("media")
+                status = {'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"]}
+            else:
+                print("unknown namespace")
+                print(namespace)
+                print(str(parsed_data))
+                return  # skip this message
+            response = format_message('receiver-0', 'sender-0', namespace, json.dumps(status))
+            conn.send(response)
+        elif message_type == 'CLOSE':
+            print("close...")
+            conn.shutdown()
+            sock.close()
+            sys.exit(0)
+        else:
+            print("unknown message type")
+            print(str(parsed_data))
+            return
+    else:
+        if namespace == "urn:x-cast:com.google.cast.tp.deviceauth":
+            print("device auth...")
+            session_id = str(uuid.uuid4())
+            transport_id = session_id
+            response = format_auth_message('receiver-0', 'sender-0', session_id, transport_id)
+            conn.send(response)
+        elif namespace == 'urn:x-cast:com.google.cast.tp.heartbeat':
+            print("heartbeat...")
+            response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.tp.heartbeat', json.dumps({'type': 'PONG'}))
+            conn.send(response)
+        else:
+            print("unknown message")
+            print(namespace)
+
 
 def format_auth_message(source_id, destination_id, sessionId, transportId):
     namespace = "urn:x-cast:com.google.cast.receiver"
