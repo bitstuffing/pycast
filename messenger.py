@@ -22,6 +22,9 @@ APP_BUBBLEUPNP = "3927FA74"
 APP_BBCSOUNDS = "03977A48"
 APP_BBCIPLAYER = "5E81F6DB"
 
+session_id = ""
+transport_id = ""
+
 def generate_media_status(requestId=0, contentId="https://telemadridhls2-live-hls.secure2.footprint.net/egress/chandler/telemadrid/telemadrid_1/index.m3u8"):
     response = {
         "requestId": requestId, 
@@ -60,7 +63,7 @@ def generate_media_status(requestId=0, contentId="https://telemadridhls2-live-hl
     return response
 
 
-def generate_receiver_status(requestId=1):
+def generate_receiver_status(session_id, transport_id, requestId=1):
     response = {
         "requestId": requestId, 
         "status": {
@@ -147,7 +150,7 @@ def handle_received_data(data, conn):
                 transport_id = session_id
                 if not player:
                     print("no player")
-                    status = generate_receiver_status(parsed_data["requestId"])
+                    status = generate_receiver_status(session_id=session_id, transport_id=transport_id, requestId=parsed_data["requestId"])
                 else:
                     print("player")
                     status = generate_media_status(parsed_data["requestId"], url)    
