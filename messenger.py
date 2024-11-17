@@ -1,7 +1,7 @@
 from struct import pack, unpack
+from urllib.parse import quote, unquote
 import json
 import re
-
 import uuid
 import json
 import re
@@ -25,39 +25,63 @@ APP_BBCIPLAYER = "5E81F6DB"
 session_id = ""
 transport_id = ""
 
-def generate_media_status(requestId=0, contentId="https://telemadridhls2-live-hls.secure2.footprint.net/egress/chandler/telemadrid/telemadrid_1/index.m3u8"):
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1788.0"
+
+headers = {
+    "User-Agent": USER_AGENT,
+    "Accept": "*/*",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive"
+}
+
+def generate_media_status(requestId=0, contentId=None, playerState="IDLE", currentTime=0):
+
+    if contentId:
+        parsed_url = contentId.split('?')
+        base_url = parsed_url[0]
+        params = parsed_url[1] if len(parsed_url) > 1 else ""
+        
+        if params:
+            encoded_contentId = contentId
+        else:
+            encoded_contentId = quote(base_url, safe=':/?=&%')
+    else:
+        encoded_contentId = "https://example.com/default.m3u8"
+
     response = {
-        "requestId": requestId, 
+        "requestId": requestId,
         "status": [{
-            "mediaSessionId": 1, 
-            "playbackRate": 1, 
-            "playerState": "IDLE", 
-            "currentTime": 0, 
-            "supportedMediaCommands": 12303,#274447, 
+            "mediaSessionId": 1,
+            "playbackRate": 1,
+            "playerState": playerState,
+            "currentTime": currentTime,
+            "supportedMediaCommands": 12303,
             "volume": {
-                "level": 1, 
+                "level": 1,
                 "muted": False
-            }, 
+            },
             "media": {
-                "contentId": contentId, 
-                "streamType": "BUFFERED", 
-                "contentType": "application/x-mpegURL", 
-                "metadata": {}
-            }, 
-            "currentItemId": 1, 
+                "contentId": encoded_contentId,
+                "streamType": "BUFFERED",
+                "contentType": "application/x-mpegURL",
+                "metadata": {},
+                "customData": {
+                    "headers": headers
+                }
+            },
+            "currentItemId": 1,
             "extendedStatus": {
-                "playerState": "LOADING", 
+                "playerState": playerState,
                 "media": {
-                    "contentId": contentId, 
-                    "streamType": "BUFFERED", 
-                    "contentType": "application/x-mpegURL", 
+                    "contentId": encoded_contentId,
+                    "streamType": "BUFFERED",
+                    "contentType": "application/x-mpegURL",
                     "metadata": {}
-                }, 
+                },
                 "mediaSessionId": 1
-            }, 
+            },
             "repeatMode": "REPEAT_OFF"
-        }], 
-        "type": "MEDIA_STATUS"
+        }]
     }
     
     return response
@@ -245,51 +269,42 @@ def format_pong_message(source_id, destination_id):
     data = json.dumps({"type": "PONG"})
     return format_message(source_id, destination_id, namespace, data)
 
-def format_load_message(source_id, destination_id, session_id, media_url, content_type, title=None, thumb=None, current_time=0.0, autoplay=True, stream_type="BUFFERED", metadata=None, subtitles_url=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1, requestId=0, namespace = "urn:x-cast:com.google.cast.media"):
+def format_load_message(source_id, destination_id, session_id, media_url, content_type="application/x-mpegURL", title=None, thumb=None, current_time=0.0, autoplay=True, stream_type="BUFFERED", metadata=None, subtitles_url=None, subtitles_lang="en-US", subtitles_mime="text/vtt", subtitle_id=1, requestId=0, namespace="urn:x-cast:com.google.cast.media"):
+    parsed_url = media_url.split('?')
+    base_url = parsed_url[0]
+    params = parsed_url[1] if len(parsed_url) > 1 else ""
+    
+    if params:
+        encoded_url = media_url
+    else:
+        encoded_url = quote(base_url, safe=':/?=&%')
+
+    if metadata is None:
+        metadata = {}
+    
     payload = {
         "type": "LOAD",
         "sessionId": session_id,
         "media": {
-            "contentId": media_url,
+            "contentId": encoded_url,
             "streamType": stream_type,
             "contentType": content_type,
-            "metadata": metadata if metadata is not None else {}
+            "metadata": metadata.copy(),
+            "customData": {
+                "headers": headers
+            }
         },
         "autoplay": autoplay,
         "currentTime": current_time,
-        "customData": {},
-        "requestId": requestId,
+        "requestId": requestId
     }
-    if title is not None:
+
+    if title:
         payload["media"]["metadata"]["title"] = title
 
-    if thumb is not None:
+    if thumb:
         payload["media"]["metadata"]["images"] = [{"url": thumb}]
 
-    # Include subtitles if a subtitle URL is provided
-    if subtitles_url is not None:
-        payload["media"]["tracks"] = [
-            {
-                "trackId": subtitle_id,
-                "type": "TEXT",
-                "trackContentId": subtitles_url,
-                "trackContentType": subtitles_mime,
-                "name": "Subtitles",
-                "language": subtitles_lang,
-                "subtype": "SUBTITLES",
-            }
-        ]
-        payload["media"]["textTrackStyle"] = {
-            "foregroundColor": "#FFFFFFFF",
-            "backgroundColor": "#000000FF",
-            "fontScale": 1.2,
-            "fontStyle": "NORMAL",
-            "fontFamily": "Droid Serif",
-            "fontGenericFamily": "SERIF",
-            "windowColor": "#AA00FFFF",
-            "windowRoundedCornerRadius": 10,
-            "windowType": "ROUNDED_CORNERS",
-        }
     return format_message(source_id, destination_id, namespace, json.dumps(payload))
 
 

@@ -9,8 +9,8 @@ import json
 import ssl
 import ipaddress
 import subprocess
+import sys
 
-chromecasts = []
 
 def ip_to_network(ip):
     parts = ip.split('.')
@@ -108,9 +108,13 @@ def parse_chromecast_info(response_text):
     }
 
 
-def search_device():
+def search_device(req = None):
+    chromecasts = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
-        ip_futures = {executor.submit(is_active, socket.inet_ntoa((ip_int).to_bytes(4, 'big'))): ip_int for ip_int in range(int.from_bytes(socket.inet_aton(NETWORKING), 'big'), int.from_bytes(socket.inet_aton(BROADCAST), 'big'))}
+        if req != None and "." in req:
+            ip_futures = {executor.submit(is_active, req): req}
+        else:
+            ip_futures = {executor.submit(is_active, socket.inet_ntoa((ip_int).to_bytes(4, 'big'))): ip_int for ip_int in range(int.from_bytes(socket.inet_aton(NETWORKING), 'big'), int.from_bytes(socket.inet_aton(BROADCAST), 'big'))}
         for future in concurrent.futures.as_completed(ip_futures):
             ip, active = future.result()
             if active:
@@ -120,13 +124,18 @@ def search_device():
                     ip, port, open = future.result()
                     if open:
                         print(f"Open port: {ip}:{port}")
-                        chromecasts.append(detect_chromecasts(ip))
+                        detected_chromecast = detect_chromecasts(ip)
+                        if req != None and "." not in req and detected_chromecast!=None and detected_chromecast["friendlyName"] == req:
+                            chromecasts.append(detected_chromecast)
+                        elif req == None or "." in req:
+                            chromecasts.append(detected_chromecast)
+    return chromecasts
 '''
 This method is used to study chromecast protocol
 '''
-def go_chromecast(chromecast):
+def go_chromecast(chromecast, url=TVE1_STREAM):
     app_id = APP_MEDIA_RECEIVER
-    media_url = TELEMADRID_STREAM
+    media_url = url
     content_type = MIMETYPE_VIDEO_URL
     source_id = SENDER_NAME
     destination_id = RECEIVER_NAME
@@ -194,9 +203,32 @@ def go_chromecast(chromecast):
         print("Response after PLAY:", response_data)
 
 if __name__ == '__main__':
-    search_device()
+    # get parameters from terminal
+    if len(sys.argv) == 1:
+        # no parameters provided
+        ip = None
+        url = TVE1_STREAM
+    elif len(sys.argv) == 2:
+        # one parameter - check if IP or URL
+        # Check if param starts with http, if not treat as IP
+        if sys.argv[1].startswith('http'):
+            ip = None
+            url = sys.argv[1]
+        else:
+            ip = sys.argv[1]
+            url = TVE1_STREAM
+        
+    else:
+        # both parameters provided
+        if "http" in sys.argv[2]:
+            ip = sys.argv[1]
+            url = sys.argv[2]
+        else:
+            ip = sys.argv[2]
+            url = sys.argv[1]
+    chromecasts = search_device(ip)
     for chromecast in chromecasts:
-        status = go_chromecast(chromecast)  
+        status = go_chromecast(chromecast, url)  
         print(f"Status for {chromecast['friendlyName']} in ip {chromecast['ip']}: {status}")
         break
             
