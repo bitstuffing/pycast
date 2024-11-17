@@ -43,7 +43,7 @@ MIMETYPE_VIDEO = "video/mp4"
 MIMETYPE_VIDEO_URL = "application/x-mpegURL"
 MIMETYPE_AAC = "audio/aac"
 TVE1_STREAM = "https://ztnr.rtve.es/ztnr/1688877.m3u8"
-TELEMADRID_STREAM = "https://telemadridhls2-live-hls.secure2.footprint.net/egress/chandler/telemadrid/telemadrid_1/index.m3u8"
+TELEMADRID_STREAM = "https://new-international-23-secure2.akamaized.net/index.m3u8"
 
 def is_active(ip):
     try:
