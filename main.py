@@ -10,7 +10,7 @@ import ssl
 import ipaddress
 import subprocess
 import sys
-
+import re
 
 def ip_to_network(ip):
     parts = ip.split('.')
@@ -33,7 +33,6 @@ def get_network_range():
     broadcast = network[:-1] + '255' # TODO, now it's class C, change that
     return network, broadcast
 
-
 NETWORKING, BROADCAST = get_network_range()
 
 SENDER_NAME = "sender-0"
@@ -42,8 +41,21 @@ BIG_BUCK_BUNNY_VIDEO = "http://commondatastorage.googleapis.com/gtv-videos-bucke
 MIMETYPE_VIDEO = "video/mp4"
 MIMETYPE_VIDEO_URL = "application/x-mpegURL"
 MIMETYPE_AAC = "audio/aac"
+MIMETYPE_MP3 = "audio/mpeg"
 TVE1_STREAM = "https://ztnr.rtve.es/ztnr/1688877.m3u8"
 TELEMADRID_STREAM = "https://new-international-23-secure2.akamaized.net/index.m3u8"
+
+def get_content_type_from_url(url):
+    if url.endswith('.aac'):
+        return MIMETYPE_AAC
+    elif url.endswith('.mp3'):
+        return MIMETYPE_MP3
+    elif url.endswith('.m3u8'):
+        return MIMETYPE_VIDEO_URL
+    elif url.endswith('.mp4'):
+        return MIMETYPE_VIDEO
+    else:
+        return "application/octet-stream"  # Default type if unknown
 
 def is_active(ip):
     try:
@@ -136,7 +148,7 @@ This method is used to study chromecast protocol
 def go_chromecast(chromecast, url=TVE1_STREAM):
     app_id = APP_MEDIA_RECEIVER
     media_url = url
-    content_type = MIMETYPE_VIDEO_URL
+    content_type = get_content_type_from_url(media_url)
     source_id = SENDER_NAME
     destination_id = RECEIVER_NAME
     requestId = 1
@@ -183,7 +195,7 @@ def go_chromecast(chromecast, url=TVE1_STREAM):
         response_data = parse_cast_response(response)
         print("Response after re-CONNECT:", response_data)
         
-        s.sendall(format_load_message(source_id, destination_id, session_id, media_url, content_type, autoplay=False, requestId=requestId, namespace='urn:x-cast:com.google.cast.media'))
+        s.sendall(format_load_message(source_id, destination_id, session_id, media_url, content_type, autoplay=True, requestId=requestId, namespace='urn:x-cast:com.google.cast.media'))
         requestId += 1
         response = s.recv(4096)
         response_data = parse_cast_response(response)
@@ -201,6 +213,14 @@ def go_chromecast(chromecast, url=TVE1_STREAM):
         response = s.recv(4096)
         response_data = parse_cast_response(response)
         print("Response after PLAY:", response_data)
+
+        # Keep the connection open to maintain the streaming
+        while True:
+            response = s.recv(4096)
+            if not response:
+                break
+            response_data = parse_cast_response(response)
+            print("Streaming response:", response_data)
 
 if __name__ == '__main__':
     # get parameters from terminal
