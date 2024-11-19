@@ -7,6 +7,8 @@ import json
 import re
 import subprocess
 import threading
+import time
+import socket
 
 # app ids
 APP_BACKDROP = "E8C28D3C"
@@ -24,7 +26,9 @@ APP_BBCIPLAYER = "5E81F6DB"
 
 session_id = ""
 transport_id = ""
+global player,vlc_process
 player = False
+vlc_process = None
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1788.0"
 
 headers = {
@@ -34,8 +38,8 @@ headers = {
     "Connection": "keep-alive"
 }
 
-def generate_media_status(requestId=0, contentId=None, playerState="IDLE", currentTime=0):
 
+def generate_media_status(requestId=0, contentId=None, playerState="IDLE", currentTime=0):
     if contentId:
         parsed_url = contentId.split('?')
         base_url = parsed_url[0]
@@ -86,6 +90,14 @@ def generate_media_status(requestId=0, contentId=None, playerState="IDLE", curre
     
     return response
 
+def update_media_status(conn, interval=5):
+    global player, url, current_time
+    while player:
+        time.sleep(interval)
+        current_time += interval
+        status = generate_media_status(contentId=url, playerState="PLAYING", currentTime=current_time)
+        response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.media', json.dumps(status))
+        conn.send(response)
 
 def generate_receiver_status(session_id, transport_id, requestId=1):
     response = {
@@ -122,18 +134,31 @@ def generate_receiver_status(session_id, transport_id, requestId=1):
     
     return response
 
-def play_media(url):
-    command = ["vlc", url]
+
+def start_vlc_with_rc(url):
+    global vlc_socket
+    command = [
+        "vlc", "--intf", "rc", "--rc-host", "localhost:5555", "--quiet", url
+    ]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    t = threading.Timer(4.0, process.kill)
-    t.start()
-    stdout, stderr = process.communicate()
-    t.cancel()
-    return stdout, stderr
+    # connect to remote VLC
+    time.sleep(2)  # wait until start and socket is available
+    vlc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    vlc_socket.connect(('localhost', 5555))
+    return process
+
+def send_vlc_command(command):
+    global vlc_socket
+    if vlc_socket:
+        try:
+            vlc_socket.sendall((command + "\n").encode())
+        except Exception as e:
+            print(f"Error sending command to VLC: {e}")
 
 def handle_received_data(data, conn):
+    global vlc_process, vlc_socket
     print('Received:', data)
-    global player, url
+    global player, url, current_time, vlc_process
     try:
         parsed_data = parse_cast_response(data)
     except Exception as e:
@@ -159,13 +184,18 @@ def handle_received_data(data, conn):
             print("ping...")
             response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.tp.heartbeat', json.dumps({'type': 'PONG'}))
             conn.send(response)
-        elif message_type == 'CLOSE':
-            conn.shutdown()  # TODO
         elif message_type == 'LOAD':
             print("load...")
+            if vlc_process is not None:
+                send_vlc_command("stop")  # stop without close VLC
             player = True
             url = parsed_data["media"]["contentId"]
-            process = play_media(url)
+            current_time = 0
+            threading.Thread(target=update_media_status, args=(conn,), daemon=True).start()  # Iniciar el hilo para actualizar el estado
+            if vlc_process is None:
+                vlc_process = start_vlc_with_rc(url)  # indicate remote control to VLC
+            else:
+                send_vlc_command(f"add {url}")  # add new url if VLC is open
             response = format_message('receiver-0', 'sender-0', 'urn:x-cast:com.google.cast.media', json.dumps({'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"]}))
             conn.send(response)
         elif message_type == 'GET_STATUS':
@@ -177,7 +207,7 @@ def handle_received_data(data, conn):
                     status = generate_receiver_status(session_id=session_id, transport_id=transport_id, requestId=parsed_data["requestId"])
                 else:
                     print("player")
-                    status = generate_media_status(parsed_data["requestId"], url)    
+                    status = generate_media_status(parsed_data["requestId"], url, "PLAYING", current_time)    
             elif namespace == 'urn:x-cast:com.google.cast.media':
                 print("media")
                 status = {'type': 'MEDIA_STATUS', 'status': [], 'requestId': parsed_data["requestId"]}
@@ -190,9 +220,25 @@ def handle_received_data(data, conn):
             conn.send(response)
         elif message_type == 'CLOSE':
             print("close...")
+            player = False  # stop
+            if vlc_process is not None:
+                send_vlc_command("quit")  # close VLC (via remote command)
+                vlc_process = None
+                if vlc_socket:
+                    vlc_socket.close()
+                    vlc_socket = None
             conn.shutdown()
             sock.close()
             sys.exit(0)
+        elif message_type == 'SEEK':
+            print("seek...")
+            new_time = parsed_data.get('currentTime', 0)
+            current_time = new_time
+            if vlc_process is not None:
+                send_vlc_command(f"seek {current_time}")  # send seek command to VLC
+            response = generate_media_status(requestId=parsed_data["requestId"], contentId=url, playerState="PLAYING", currentTime=current_time)
+            response_message = format_message('receiver-0', 'sender-0', namespace, json.dumps(response))
+            conn.send(response_message)
         else:
             print("unknown message type")
             print(str(parsed_data))

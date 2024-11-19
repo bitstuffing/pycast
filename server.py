@@ -59,8 +59,12 @@ while True:
 
                 if data:
                     print('Received:', data)
-                    handle_received_data(data, conn)
+                    should_close = handle_received_data(data, conn)
+                    if should_close:
+                        conn.shutdown()
+                        break
                 else:
                     break
         finally:
-            conn.shutdown()
+            #conn.shutdown()
+            pass
