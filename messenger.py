@@ -24,7 +24,7 @@ APP_BBCIPLAYER = "5E81F6DB"
 
 session_id = ""
 transport_id = ""
-
+player = False
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 Edg/114.0.1788.0"
 
 headers = {
@@ -133,7 +133,7 @@ def play_media(url):
 
 def handle_received_data(data, conn):
     print('Received:', data)
-
+    global player, url
     try:
         parsed_data = parse_cast_response(data)
     except Exception as e:
